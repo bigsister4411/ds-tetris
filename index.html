@@ -5,24 +5,27 @@
     <title>Mobile Tetris</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
+        /* Improved mobile styles */
         body {
             margin: 0;
             padding: 0;
             background: #000;
             touch-action: none;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
         }
         
         #gameContainer {
             position: relative;
+            width: 100%;
+            height: 100%;
         }
         
         #gameCanvas {
-            border: 2px solid #333;
             touch-action: none;
+            image-rendering: crisp-edges;
         }
         
         #startScreen {
@@ -32,20 +35,23 @@
             transform: translate(-50%, -50%);
             text-align: center;
             color: white;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.9);
             padding: 20px;
             border-radius: 10px;
+            width: 80%;
+            max-width: 300px;
         }
         
         #startButton {
             padding: 15px 30px;
-            font-size: 20px;
+            font-size: 1.2em;
             margin-top: 20px;
             background: #4CAF50;
             border: none;
             color: white;
             border-radius: 5px;
             cursor: pointer;
+            width: 100%;
         }
         
         #scoreBoard {
@@ -54,7 +60,8 @@
             left: 10px;
             color: white;
             font-family: Arial;
-            font-size: 20px;
+            font-size: 1.2em;
+            text-shadow: 2px 2px 2px rgba(0,0,0,0.5);
         }
     </style>
 </head>
@@ -62,8 +69,8 @@
     <div id="gameContainer">
         <canvas id="gameCanvas"></canvas>
         <div id="startScreen">
-            <h2>Welcome to Mobile Tetris</h2>
-            <p>←→ Swipe to move<br>
+            <h2>MOBILE TETRIS</h2>
+            <p>← → Swipe to move<br>
             ↑ Tap to rotate<br>
             ↓ Swipe down to drop<br>
             ✌️ Two fingers to pause</p>
@@ -73,25 +80,13 @@
     </div>
 
 <script>
+// Mobile-first initialization
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const startScreen = document.getElementById('startScreen');
 const scoreBoard = document.getElementById('scoreBoard');
 
-// Mobile-first sizing
-const setCanvasSize = () => {
-    const screenWidth = window.innerWidth;
-    const screenHeight = window.innerHeight;
-    const blockSize = Math.min(screenWidth / 10, screenHeight / 20);
-    canvas.width = blockSize * 10;
-    canvas.height = blockSize * 20;
-    BLOCK_SIZE = blockSize;
-};
-setCanvasSize();
-window.addEventListener('resize', setCanvasSize);
-
-// Game constants
-let BLOCK_SIZE;
+let BLOCK_SIZE = 30;
 const COLS = 10;
 const ROWS = 20;
 const SHAPES = [
@@ -114,13 +109,25 @@ let gameLoop;
 let isPaused = false;
 let gameOver = false;
 
+function initializeCanvas() {
+    const container = document.getElementById('gameContainer');
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    
+    BLOCK_SIZE = Math.min(width / COLS, height / ROWS);
+    canvas.width = COLS * BLOCK_SIZE;
+    canvas.height = ROWS * BLOCK_SIZE;
+}
+
 function initGame() {
     grid = Array(ROWS).fill().map(() => Array(COLS).fill(0));
     score = 0;
     level = 1;
     gameOver = false;
+    isPaused = false;
     spawnBlock();
     updateScore();
+    draw();
 }
 
 function spawnBlock() {
@@ -128,10 +135,15 @@ function spawnBlock() {
     currentBlock = {
         shape: SHAPES[shapeIndex],
         color: COLORS[shapeIndex],
-        x: Math.floor(COLS/2) - 1,
+        x: Math.floor(COLS/2) - Math.floor(SHAPES[shapeIndex][0].length/2),
         y: 0
     };
-    if (collision()) gameOver = true;
+    
+    // Immediate collision check
+    if (collision()) {
+        gameOver = true;
+        draw();
+    }
 }
 
 function draw() {
@@ -165,14 +177,28 @@ function draw() {
         });
     }
 
+    // Game over display
     if (gameOver) {
         ctx.fillStyle = '#FFF';
-        ctx.font = '30px Arial';
+        ctx.font = '20px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2);
+        ctx.fillText('GAME OVER - TAP TO RESTART', canvas.width/2, canvas.height/2);
     }
 }
 
+// Collision detection
+function collision() {
+    return currentBlock.shape.some((row, dy) => 
+        row.some((cell, dx) => {
+            if (!cell) return false;
+            const nx = currentBlock.x + dx;
+            const ny = currentBlock.y + dy;
+            return nx < 0 || nx >= COLS || ny >= ROWS || grid[ny][nx];
+        })
+    );
+}
+
+// Game mechanics
 function moveDown() {
     if (gameOver || isPaused) return;
     currentBlock.y++;
@@ -180,23 +206,13 @@ function moveDown() {
         currentBlock.y--;
         placeBlock();
     }
-}
-
-function collision() {
-    return currentBlock.shape.some((row, y) => 
-        row.some((value, x) => {
-            if (!value) return false;
-            const newX = currentBlock.x + x;
-            const newY = currentBlock.y + y;
-            return newX < 0 || newX >= COLS || newY >= ROWS || grid[newY]?.[newX];
-        })
-    );
+    draw();
 }
 
 function placeBlock() {
-    currentBlock.shape.forEach((row, y) => {
-        row.forEach((value, x) => {
-            if (value) grid[currentBlock.y + y][currentBlock.x + x] = currentBlock.color;
+    currentBlock.shape.forEach((row, dy) => {
+        row.forEach((cell, dx) => {
+            if (cell) grid[currentBlock.y + dy][currentBlock.x + dx] = currentBlock.color;
         });
     });
     clearLines();
@@ -221,53 +237,65 @@ function clearLines() {
 }
 
 function updateScore() {
-    scoreBoard.innerHTML = `Score: ${score} | Level: ${level}`;
+    scoreBoard.textContent = `Score: ${score} | Level: ${level}`;
 }
 
 // Touch controls
-let touchStartX = 0;
-let touchStartY = 0;
-let lastTouchTime = 0;
+let lastTap = 0;
+let touchStart = { x: 0, y: 0 };
 
 canvas.addEventListener('touchstart', e => {
     e.preventDefault();
+    if (gameOver) {
+        initGame();
+        return;
+    }
+    
     if (e.touches.length === 2) {
         isPaused = !isPaused;
         return;
     }
+    
+    touchStart.x = e.touches[0].clientX;
+    touchStart.y = e.touches[0].clientY;
+    
+    // Double tap detection
     const now = Date.now();
-    if (now - lastTouchTime < 200) { // Double tap
+    if (now - lastTap < 300) {
         rotateBlock();
-        lastTouchTime = 0;
+        lastTap = 0;
     } else {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        lastTouchTime = now;
+        lastTap = now;
     }
-});
+}, { passive: false });
 
-canvas.addEventListener('touchmove', e => e.preventDefault());
 canvas.addEventListener('touchend', e => {
     e.preventDefault();
-    if (e.touches.length > 0 || gameOver) return;
+    if (gameOver || e.changedTouches.length !== 1) return;
     
-    const touchEndX = e.changedTouches[0].clientX;
-    const touchEndY = e.changedTouches[0].clientY;
+    const touchEnd = {
+        x: e.changedTouches[0].clientX,
+        y: e.changedTouches[0].clientY
+    };
     
-    const dx = touchEndX - touchStartX;
-    const dy = touchEndY - touchStartY;
+    const dx = touchEnd.x - touchStart.x;
+    const dy = touchEnd.y - touchStart.y;
     
-    if (Math.abs(dx) > Math.abs(dy)) {
-        moveBlock(dx > 0 ? 1 : -1);
-    } else {
-        if (dy > 50) hardDrop();
+    if (Math.abs(dx) > 30 || Math.abs(dy) > 30) {
+        if (Math.abs(dx) > Math.abs(dy)) {
+            moveBlock(dx > 0 ? 1 : -1);
+        } else {
+            if (dy > 30) hardDrop();
+        }
     }
-});
+}, { passive: false });
 
+// Game controls
 function moveBlock(dir) {
     if (isPaused) return;
     currentBlock.x += dir;
     if (collision()) currentBlock.x -= dir;
+    draw();
 }
 
 function rotateBlock() {
@@ -278,6 +306,7 @@ function rotateBlock() {
     const prevShape = currentBlock.shape;
     currentBlock.shape = rotated;
     if (collision()) currentBlock.shape = prevShape;
+    draw();
 }
 
 function hardDrop() {
@@ -290,14 +319,21 @@ function hardDrop() {
 // Start game
 document.getElementById('startButton').addEventListener('click', () => {
     startScreen.style.display = 'none';
+    initializeCanvas();
     initGame();
     gameLoop = setInterval(() => {
-        if (!isPaused && !gameOver) {
-            moveDown();
-            draw();
-        }
-    }, 1000 / level);
+        if (!isPaused && !gameOver) moveDown();
+    }, Math.max(50, 1000 - (level * 100)));
 });
+
+// Initial setup
+window.addEventListener('resize', initializeCanvas);
+window.addEventListener('orientationchange', initializeCanvas);
+initializeCanvas();
+draw();
+</script>
+</body>
+</html>
 
 // Initial setup
 draw();
